@@ -30,6 +30,7 @@ const MODULES = [
   { id: 'mood',     name: '心情记录', icon: '💭' },
   { id: 'review',   name: '每日复盘', icon: '📝' },
   { id: 'news',     name: '每日新闻', icon: '📰' },
+  { id: 'podcast',  name: '每日播客', icon: '🎙️' },
   { id: 'quotes',   name: '书摘',     icon: '🔖' },
   { id: 'fav',      name: '我的收藏', icon: '⭐' }
 ];
@@ -159,6 +160,8 @@ let majorView = 'test';     // test=自测 | memo=记忆
 let majorTestView = 'quiz'; // quiz=题库自测 | concept=核心概念
 let majorMemoBook = 'gl';   // gl=文化产业概论 | ys=艺术学概论
 let majorMemoCh = 0;        // 记忆板块当前章节索引
+let podCat = '全部';        // 播客分类筛选：全部 | 自我成长 | 女性成长 | 时事热点 | 访谈
+let newsOpen = new Set();   // 新闻展开详情的索引集合
 /* 全局题库（由 classics.js / culture.js 注入） */
 const CLASSICS = (typeof window !== 'undefined' && window.CLASSICS) ? window.CLASSICS.slice() : [];
 const CULTURE = (typeof window !== 'undefined' && window.CULTURE) ? window.CULTURE.slice() : [];
@@ -434,6 +437,8 @@ function homeHTML() {
 
   ${homeNewsHTML()}
 
+  ${homePodcastHTML()}
+
   ${homeQuoteHTML()}
 
   ${homeDailySentHTML()}
@@ -461,23 +466,25 @@ function homeTodoHTML() {
   const eng = store.get('wb_english_today_' + TODAY, 0);
   const readMin = store.get('wb_reading_min_' + TODAY, 0);
   const sentAuto = !!store.get('wb_eng_action_auto_' + TODAY, false);
+  const podMin = store.get('wb_podcast_min_' + TODAY, 0);
   const base = { word: eng >= 30, read: readMin >= 20, sent: sentAuto };
   const ov = store.get('wb_todo_' + TODAY, {}) || {};
   const st = Object.assign({}, base, ov);
   const items = [
     { key: 'word', ic: '🔤', label: '背单词 30 个', done: st.word },
     { key: 'sent', ic: '🧅', label: '拆长难句 3 句', done: st.sent },
-    { key: 'read', ic: '📖', label: '阅读 20 分钟', done: st.read }
+    { key: 'read', ic: '📖', label: '阅读 20 分钟', done: st.read },
+    { key: 'pod', ic: '🎙️', label: `听播客 ${podMin} 分钟`, done: podMin >= 20 }
   ];
   const done = items.filter(i => i.done).length;
   return `
   <div class="card">
-    <div class="card-title">✅ 今日待办 <span class="muted" style="font-weight:500">${done}/3</span></div>
+    <div class="card-title">✅ 今日待办 <span class="muted" style="font-weight:500">${done}/4</span></div>
     ${items.map(i => `
       <div class="item" style="cursor:pointer" data-action="todo-toggle" data-key="${i.key}">
         <div class="main"><div class="t"><span style="display:inline-block;width:22px">${i.done ? '✅' : '⬜'}</span> ${i.ic} ${esc(i.label)}${i.done ? ' <span class="chip" style="background:#E3F4E1;color:#2E7D32;border-color:transparent;font-size:11px">已完成</span>' : ''}</div></div>
       </div>`).join('')}
-    <div class="muted mt8">带 ✓ 的按你当日数据自动点亮（背够30词/读够20分/进过行动卡）；点一下可手动勾选或取消。</div>
+    <div class="muted mt8">带 ✓ 的按你当日数据自动点亮（背够30词/读够20分/进过行动卡/听够20分播客）；点一下可手动勾选或取消。</div>
   </div>`;
 }
 
@@ -516,7 +523,7 @@ function homeSettingsHTML() {
   </div>`;
 }
 
-/* ---------- 每日新闻（联网抓取+总结，独立于学习进度）---------- */
+/* ---------- 每日新闻（联网抓取+总结，可点开看详情解读）---------- */
 function newsHTML() {
   const d = window.DAILY_NEWS;
   if (!d || !d.items || !d.items.length) {
@@ -526,20 +533,25 @@ function newsHTML() {
     </div>`;
   }
   const catColor = { '国内': '#EC6A92', '国际': '#9C6AD6', '教育': '#3FA796' };
-  const items = d.items.map(it => `
-    <div class="item">
+  const items = d.items.map((it, i) => {
+    const open = newsOpen.has(i);
+    return `
+    <div class="item" style="cursor:pointer" data-action="news-toggle" data-idx="${i}">
       <div class="main">
         <div>
           <span class="chip" style="background:${catColor[it.category] || '#FADADD'};color:#fff;border-color:transparent;margin-right:6px">${esc(it.category)}</span>
           <span class="t">${esc(it.title)}</span>
+          <span style="margin-left:4px;color:var(--pink-500);font-size:12px">${open ? '▾' : '▸'}</span>
         </div>
         <div class="s mt8">${esc(it.summary)}</div>
-        <div class="muted mt8">来源：${esc(it.source || '未知')}</div>
+        ${open && it.detail ? `<div class="note mt8">${esc(it.detail)}</div>` : ''}
+        <div class="muted mt8">来源：${esc(it.source || '未知')}${open ? '' : ' · 点此看详情解读'}</div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   return `<div class="card">
     <div class="card-title">📰 每日新闻热点</div>
-    <div class="muted mb12">更新于 ${esc(d.date || '未知')} · 联网抓取 + AI 总结，与学习进度相互独立</div>
+    <div class="muted mb12">更新于 ${esc(d.date || '未知')} · 联网抓取 + AI 总结 · 点每条标题展开看详情解读</div>
     ${items}
     <div class="muted mt12">${esc(d.note || '')}</div>
   </div>`;
@@ -586,7 +598,7 @@ function quotesHTML() {
   ${cards}`;
 }
 
-/* 首页新闻头条小卡（只显示今日前 3 条） */
+/* 首页新闻头条小卡（只显示今日前 3 条，点跳转到新闻模块看详情） */
 function homeNewsHTML() {
   const d = window.DAILY_NEWS;
   if (!d || !d.items || !d.items.length) {
@@ -597,7 +609,7 @@ function homeNewsHTML() {
   }
   const catColor = { '国内': '#EC6A92', '国际': '#9C6AD6', '教育': '#3FA796' };
   const top = d.items.slice(0, 3).map(it => `
-    <div class="item">
+    <div class="item" style="cursor:pointer" data-action="nav" data-id="news">
       <div class="main">
         <div>
           <span class="chip" style="background:${catColor[it.category] || '#FADADD'};color:#fff;border-color:transparent;margin-right:6px">${esc(it.category)}</span>
@@ -609,11 +621,103 @@ function homeNewsHTML() {
   return `<div class="card">
     <div class="card-title">
       📰 今日新闻头条
-      <span style="float:right;font-size:12px;font-weight:500;color:var(--pink-500);cursor:pointer" data-action="nav" data-id="news">查看全部 →</span>
+      <span style="float:right;font-size:12px;font-weight:500;color:var(--pink-500);cursor:pointer" data-action="nav" data-id="news">点开看详情 →</span>
     </div>
-    <div class="muted mb12">更新于 ${esc(d.date || '未知')} · 早 8 点自动更新</div>
+    <div class="muted mb12">更新于 ${esc(d.date || '未知')} · 早 8 点自动更新 · 点新闻跳转看详情解读</div>
     ${top}
   </div>`;
+}
+
+/* ---------- 每日播客（接小宇宙，每日推荐+记录收听时长）---------- */
+function pickDailyPodcast() {
+  const arr = window.PODCASTS || [];
+  if (!arr.length) return null;
+  const dayIdx = Math.floor(Date.now() / 86400000);
+  return arr[dayIdx % arr.length];
+}
+/* 首页播客小卡：今日推荐 + 收听时长记录 */
+function homePodcastHTML() {
+  const p = pickDailyPodcast();
+  const min = store.get('wb_podcast_min_' + TODAY, 0);
+  const catColor = { '自我成长': '#9C6AD6', '女性成长': '#EC6A92', '时事热点': '#3FA796', '访谈': '#E89B3C' };
+  const rec = p ? `
+    <div class="item" style="cursor:pointer">
+      <div class="main">
+        <div>
+          <span class="chip" style="background:${catColor[p.cat] || '#FADADD'};color:#fff;border-color:transparent;margin-right:6px">${esc(p.cat)}</span>
+          <span class="t">${esc(p.title)} · ${esc(p.host)}</span>
+        </div>
+        <div class="s mt8">${esc(p.desc)}</div>
+        <div class="muted mt8">建议时长 ${p.dur} 分钟</div>
+      </div>
+    </div>` : '<div class="empty">暂无推荐播客。</div>';
+  return `<div class="card">
+    <div class="card-title">
+      🎙️ 今日播客推荐
+      <span style="float:right;font-size:12px;font-weight:500;color:var(--pink-500);cursor:pointer" data-action="nav" data-id="podcast">全部播客 →</span>
+    </div>
+    <div class="muted mb12">每天推荐一档 · 点小宇宙图标直接跳 App 收听</div>
+    ${rec}
+    ${p ? `<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;text-decoration:none">🎧 去小宇宙收听</a>` : ''}
+    <div class="row mt12" style="align-items:center;gap:8px">
+      <span class="muted">今日已听</span>
+      <button class="btn sm ghost" data-action="pod-min-dec">−</button>
+      <span class="chip" style="min-width:60px;text-align:center">${min} 分</span>
+      <button class="btn sm ghost" data-action="pod-min-inc">+</button>
+      <button class="btn sm" data-action="pod-done" style="margin-left:auto">听完 ✓</button>
+    </div>
+  </div>`;
+}
+/* 播客模块：分类筛选 + 列表 + 收听时长汇总 */
+function podcastHTML() {
+  const all = window.PODCASTS || [];
+  const catColor = { '自我成长': '#9C6AD6', '女性成长': '#EC6A92', '时事热点': '#3FA796', '访谈': '#E89B3C' };
+  const cats = [['全部', '全部'], ['自我成长', '自我成长'], ['女性成长', '女性成长'], ['时事热点', '时事热点'], ['访谈', '访谈']];
+  const bar = cats.map(([v, n]) =>
+    `<div class="chip ${podCat === v ? 'on' : ''}" data-action="pod-cat" data-v="${v}" style="cursor:pointer">${n}</div>`).join('');
+  const list = all.filter(p => podCat === '全部' || p.cat === podCat);
+  const items = list.length ? list.map(p => `
+    <div class="item">
+      <div class="main">
+        <div>
+          <span class="chip" style="background:${catColor[p.cat] || '#FADADD'};color:#fff;border-color:transparent;margin-right:6px">${esc(p.cat)}</span>
+          <span class="t">${esc(p.title)}</span>
+          <span class="muted" style="margin-left:6px;font-size:12px">${esc(p.host)}</span>
+        </div>
+        <div class="s mt8">${esc(p.desc)}</div>
+        <div class="row mt8" style="align-items:center;gap:8px">
+          <span class="muted">建议 ${p.dur} 分钟</span>
+          <a class="btn sm" href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">🎧 小宇宙收听</a>
+        </div>
+      </div>
+    </div>`).join('') : '<div class="empty">没有该分类的播客。</div>';
+  // 近7天收听汇总
+  const week = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const key = fmtDate(d);
+    week.push({ key, min: store.get('wb_podcast_min_' + key, 0), label: ('日一二三四五六')[d.getDay()] });
+  }
+  const weekTotal = week.reduce((s, w) => s + w.min, 0);
+  const weekMax = Math.max(1, ...week.map(w => w.min));
+  const bars = week.map(w => `
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="height:${Math.round(w.min / weekMax * 60)}px;width:18px;background:linear-gradient(180deg,var(--pink-400),var(--pink-500));border-radius:4px 4px 0 0;min-height:2px" title="${w.min}分"></div>
+      <div class="muted" style="font-size:11px">${w.min}</div>
+      <div class="muted" style="font-size:11px">${w.label}</div>
+    </div>`).join('');
+  return `
+  <div class="card">
+    <div class="card-title">🎙️ 每日播客</div>
+    <div class="muted mb12">每天一档推荐 · ${all.length} 档播客 · 自我成长 / 女性成长 / 时事热点 / 访谈</div>
+    <div class="row" style="gap:8px;align-items:center">${bar}</div>
+  </div>
+  <div class="card">
+    <div class="card-title">📊 近 7 天收听时长 <span class="muted" style="font-weight:500">合计 ${weekTotal} 分钟</span></div>
+    <div style="display:flex;align-items:flex-end;gap:4px;padding:10px 4px 4px">${bars}</div>
+    <div class="muted mt8">点播客右侧「🎧 小宇宙收听」跳转 App；听完回来点「听完 ✓」+ 时长。</div>
+  </div>
+  ${items}`;
 }
 
 /* 每日书摘（首页小卡，按日期稳定轮换一条） */
@@ -685,7 +789,7 @@ function moduleHTML(id) {
   const fns = {
     english: englishHTML, chinese: chineseHTML, major: majorHTML, reading: readingHTML, exercise: exerciseHTML, food: foodHTML,
     finlearn: finlearnHTML, sleep: sleepHTML, skincare: skincareHTML, mood: moodHTML,
-    review: reviewHTML, news: newsHTML, quotes: quotesHTML, fav: favHTML
+    review: reviewHTML, news: newsHTML, podcast: podcastHTML, quotes: quotesHTML, fav: favHTML
   };
   const fn = fns[id];
   return fn ? fn() : '<div class="empty">模块建设中…</div>';
@@ -2200,6 +2304,28 @@ const actions = {
     const ov = store.get('wb_todo_' + TODAY, {}) || {};
     ov[key] = !ov[key];
     store.set('wb_todo_' + TODAY, ov);
+    render();
+  },
+  // 新闻展开详情
+  'news-toggle'(el) {
+    const i = +el.dataset.idx;
+    if (newsOpen.has(i)) newsOpen.delete(i); else newsOpen.add(i);
+    render();
+  },
+  // 播客
+  'pod-cat'(el) { podCat = el.dataset.v; render(); },
+  'pod-min-inc'() {
+    const k = 'wb_podcast_min_' + TODAY;
+    store.set(k, store.get(k, 0) + 10); render();
+  },
+  'pod-min-dec'() {
+    const k = 'wb_podcast_min_' + TODAY;
+    store.set(k, Math.max(0, store.get(k, 0) - 10)); render();
+  },
+  'pod-done'() {
+    const k = 'wb_podcast_min_' + TODAY;
+    const cur = store.get(k, 0);
+    if (cur < 20) store.set(k, 20);
     render();
   },
   // 字号设置
