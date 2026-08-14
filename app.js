@@ -2379,7 +2379,7 @@ function lichaRandomHTML(LIT) {
     <div class="card-title">🎲 随机高频考点（${lichaRandomIdx + 1}/${lichaRandom.length}）<span class="chip" style="margin-left:8px;background:#FDEFF3">${esc(it.cat)}</span></div>
     <div class="flash" data-action="licha-rand-flip" style="cursor:pointer;text-align:center;padding:22px 14px;border-radius:18px;background:linear-gradient(135deg,#FFF0F4,#FDE0EC);border:1.5px solid #F8C8D2">
       <div style="font-size:20px;font-weight:800;color:#C24A77">${esc(it.face)}</div>
-      ${lichaRandomReveal ? `<div class="mt12" style="font-size:15px;color:#5A3A45;text-align:left;line-height:1.7">${esc(it.back)}</div>` : `<div class="muted mt12">👆 点击看要点</div>`}
+      ${lichaRandomReveal ? `<div class="mt12" style="font-size:15px;color:#5A3A45;text-align:left;line-height:1.7">${esc(it.back)}</div>${it.tip ? `<div class="mt10" style="background:#FFF6F8;border-radius:10px;padding:8px 10px;font-size:13px;color:#C24A77;line-height:1.6">🧠 记忆口诀：${esc(it.tip)}</div>` : ''}` : `<div class="muted mt12">👆 点击看要点</div>`}
     </div>
     <div class="row mt16" style="justify-content:center">
       <button class="btn ghost" data-action="licha-rand-next">记不清，下一个 ›</button>
@@ -2397,6 +2397,7 @@ function lichaCompareHTML(GAP) {
         <div style="flex:1;background:#EAF7F1;border-radius:12px;padding:10px"><div style="font-size:12px;color:#3F9C7A;font-weight:700">B</div><div style="font-weight:700;color:#5A3A45;margin-top:4px">${esc(c.b)}</div></div>
       </div>
       <div style="margin-top:8px;font-size:13px;color:#7A6A70;line-height:1.6;background:#FFF8FA;border-radius:10px;padding:8px 10px">${esc(c.note)}</div>
+      ${c.core ? `<div style="margin-top:6px;font-size:12px;color:#C24A77;background:#FFF0F4;border-radius:10px;padding:6px 10px">⚡ 易混核心：<b>${esc(c.core)}</b></div>` : ''}
     </div>`).join('');
   return `<div class="card"><div class="card-title">⚖️ 混淆对比表（${GAP.compare.length} 组）</div><div class="note mt8">风格/朝代/作者相近的条目并排对比，考前一眼分清。</div></div>${rows}`;
 }
@@ -2410,7 +2411,7 @@ function lichaBlankHTML(GAP) {
   <div class="card">
     <div class="card-title">✏️ 挖空自测（${lichaBlankIdx + 1}/${list.length}）<span class="chip" style="margin-left:8px;background:#FDEFF3">${esc(b.cat)}</span></div>
     <div style="font-size:16px;line-height:1.9;color:#5A3A45;margin-top:10px">${esc(b.q).replace('______', blankHtml)}</div>
-    ${lichaBlankReveal ? `<div class="mt12" style="background:#EAF7F1;border-radius:12px;padding:10px 12px"><div style="font-weight:800;color:#2E8B57">答案：${esc(b.a)}</div><div style="font-size:13px;color:#5A7A66;margin-top:6px">📌 ${esc(b.point)}</div></div>` : ''}
+    ${lichaBlankReveal ? `<div class="mt12" style="background:#EAF7F1;border-radius:12px;padding:10px 12px"><div style="font-weight:800;color:#2E8B57">答案：${esc(b.a)}</div><div style="font-size:13px;color:#3F7A5E;margin-top:6px">📌 ${esc(b.point)}</div>${b.explain ? `<div style="font-size:13px;color:#5A7A66;margin-top:6px;line-height:1.7">🔍 解析：${esc(b.explain)}</div>` : ''}${b.tip ? `<div style="font-size:13px;color:#C24A77;margin-top:6px">🧠 口诀：${esc(b.tip)}</div>` : ''}</div>` : ''}
     ${!lichaBlankReveal
       ? `<div class="row mt16" style="justify-content:center"><button class="btn" data-action="licha-blank-reveal">🔍 显示答案</button></div>`
       : `<div class="row mt16" style="justify-content:center">
@@ -2601,10 +2602,16 @@ function mapRender(MAP, fill) {
     const termHtml = showTerm
       ? `<span style="font-weight:${depth === 0 ? '800' : '700'};color:${node.key ? '#C24A77' : '#5A3A45'}">${esc(node.t)}</span>${node.key ? ' <span title="历年高频">⭐</span>' : ''}`
       : `<span class="map-blank" data-action="map-reveal-term" data-id="${node.id}" style="color:#C24A77;font-weight:700;cursor:pointer;border-bottom:2px dashed #E08DA0;padding:0 8px">＿＿＿＿</span>`;
+    const detailInner = (node.d ? `<div style="font-weight:700;color:#5A3A45">${esc(node.d)}</div>` : '')
+      + (node.p && node.p.length ? `<div style="margin-top:6px;color:#6E5A60;line-height:1.75;font-size:13px">${node.p.map(pt => '· ' + esc(pt)).join('<br>')}</div>` : '')
+      + (node.e ? `<div style="margin-top:6px;color:#C97589;font-size:13px">💡 例：${esc(node.e)}</div>` : '')
+      + (node.x ? `<div style="margin-top:6px;color:#C24A77;font-size:13px">🎯 考点：${esc(node.x)}</div>` : '')
+      + (node.case ? `<div style="margin-top:6px;color:#C97589;font-size:13px">💡 ${esc(node.case)}</div>` : '')
+      + (node.rel ? `<div style="margin-top:6px;color:#C24A77;font-size:12px">🔗 ${esc(node.rel)}</div>` : '');
     const detailHtml = (!fill && mapDetail === node.id)
-      ? `<div style="margin:4px 0 2px ${indent + 18}px;background:#FFF8FA;border-radius:10px;padding:8px 10px;font-size:13px;color:#5A3A45;line-height:1.6">${esc(node.d || '')}${node.case ? `<div style="margin-top:6px;color:#C24A77">💡 ${esc(node.case)}</div>` : ''}</div>`
-      : (fill && revealed && node.d)
-      ? `<div style="margin:4px 0 2px ${indent + 18}px;background:#F0F7F2;border-radius:10px;padding:6px 10px;font-size:12px;color:#3F7A5E">${esc(node.d || '')}</div>`
+      ? `<div style="margin:4px 0 2px ${indent + 18}px;background:#FFF8FA;border-radius:10px;padding:9px 11px;font-size:13px;line-height:1.5">${detailInner}</div>`
+      : (fill && revealed)
+      ? `<div style="margin:4px 0 2px ${indent + 18}px;background:#F0F7F2;border-radius:10px;padding:7px 10px;font-size:12px;line-height:1.5">${detailInner}</div>`
       : '';
     const childHtml = (open && hasKids) ? node.children.map(c => render(c, depth + 1)).join('') : '';
     const bg = depth === 0 ? '#FDF0F4' : (depth === 1 ? '#FDEFF3' : '#FFF8FA');
