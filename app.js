@@ -114,7 +114,7 @@ const PAGE_SIZE = 120;      // 词库每页条数
 /* 古诗文默写状态 */
 let clQueue = [];
 let clReveal = false;
-/* 每日阅读子视图 + 文化产业学自测状态 */
+/* 每日阅读子视图 + 管理学原理自测状态 */
 let readView = 'books';      // books | culture
 let culBook = '全部';
 let culQueue = [];
@@ -158,7 +158,7 @@ let clBrowseIdx = 0;        // 古诗文全篇浏览索引
 let essayCat = 'w_all';    // 作文好词好句分类筛选（w_=好词, s_=好句）
 let majorView = 'test';     // test=自测 | memo=记忆
 let majorTestView = 'quiz'; // quiz=题库自测 | concept=核心概念
-let majorMemoBook = 'gl';   // gl=文化产业概论 | ys=艺术学概论
+let majorMemoBook = 'gl';   // gl=管理学原理(邢以群) | ys=马工程管理学
 let majorMemoCh = 0;        // 记忆板块当前章节索引
 let podCat = '全部';        // 播客分类筛选：全部 | 自我成长 | 女性成长 | 时事热点 | 访谈
 let newsOpen = new Set();   // 新闻展开详情的索引集合
@@ -194,7 +194,7 @@ function navHTML() {
      </div>`).join('');
   return `<div class="brand">
       <span class="logo">🌸</span>
-      <span><span class="title">焦焦的<br>专属工作台</span><br><span class="sub">专升本 · 湖财 · 文化产业管理</span></span>
+      <span><span class="title">焦焦的<br>专属工作台</span><br><span class="sub">专升本 · 吉首大学 · 工商管理</span></span>
     </div>` + items;
 }
 function topHTML() {
@@ -380,6 +380,26 @@ function homeCalendarHTML() {
     <div class="s" style="line-height:1.7;color:var(--ink)">${esc(wk.d)}</div>
   </div>` : ''}`;
 }
+function goalCardHTML() {
+  return `
+  <div class="card goal-card">
+    <div class="card-title">🎯 我的目标 · 吉首大学 · 工商管理</div>
+    <div class="row" style="gap:10px;flex-wrap:wrap">
+      <div class="pill"><div class="k">大学英语</div><div class="v">150分</div></div>
+      <div class="pill"><div class="k">大学语文</div><div class="v">150分</div></div>
+      <div class="pill"><div class="k">管理学原理</div><div class="v">200分</div></div>
+      <div class="pill" style="background:#EAF7F1"><div class="k">总分</div><div class="v">500分</div></div>
+    </div>
+    <div class="row mt12" style="gap:10px;flex-wrap:wrap">
+      <div class="pill" style="background:#FFF6F8"><div class="k">2026招生计划</div><div class="v">74人</div></div>
+      <div class="pill" style="background:#FFF6F8"><div class="k">报名人数</div><div class="v">408人</div></div>
+      <div class="pill" style="background:#FFF6F8"><div class="k">录取率</div><div class="v">18.14%</div></div>
+      <div class="pill" style="background:#FFF6F8"><div class="k">最低录取分</div><div class="v">346</div></div>
+    </div>
+    <div class="note mt12">📌 建议目标总分 <b>360+</b>（英语105 / 语文110 / 管理学原理145），比2026录取线346留安全余量。考试科目以报考当年招生章程为准。</div>
+  </div>`;
+}
+
 function homeHTML() {
   const checked = store.get('wb_checkin_' + TODAY, false);
   const streak = checkinStreak();
@@ -433,6 +453,8 @@ function homeHTML() {
 
   ${homeCalendarHTML()}
 
+  ${goalCardHTML()}
+
   ${taskSectionHTML()}
 
   ${homeNewsHTML()}
@@ -449,7 +471,7 @@ function homeHTML() {
     <div class="card-title">📚 三科学习进度</div>
     ${progRow('🔤 大学英语（150分）', '词汇掌握', engKnown, engTotal, '今日已背 ' + engToday + ' 词')}
     ${progRow('📜 大学语文（150分）', '古诗文默写', clDone, clTotal, '文学常识 ' + (store.get('wb_lit_done', []).length) + '/' + (window.LIT || []).length)}
-    ${progRow('🎓 文化产业学（200分）', '题库自测', culDone, culTotal, '章节背诵 ' + (store.get('wb_major_memo_done', []).length) + '/' + (((window.MAJOR || {}).gl || []).length + ((window.MAJOR || {}).ys || []).length) + ' 章')}
+    ${progRow('🎓 管理学原理（200分）', '题库自测', culDone, culTotal, '章节背诵 ' + (store.get('wb_major_memo_done', []).length) + '/' + (((window.MAJOR || {}).gl || []).length + ((window.MAJOR || {}).ys || []).length) + ' 章')}
   </div>
 
   <div class="card">
@@ -1473,7 +1495,7 @@ function litHTML() {
   return `<div class="card"><div class="card-title">📚 文学常识 · 共 ${all.length} 条</div><div class="row" style="gap:6px;flex-wrap:wrap">${chips}</div></div><div class="card">${list || '<div class="empty">暂无该类常识</div>'}</div>`;
 }
 
-/* ---------- 专业课（文化产业学）---------- */
+/* ---------- 专业课（管理学原理）---------- */
 function majorHTML() {
   if (quiz.mod === 'major') return quizHTML();
   const done = store.get('wb_cul_done', []);
@@ -1483,7 +1505,7 @@ function majorHTML() {
   const ptCount = M.gl.reduce((s, c) => s + c.points.length, 0) + M.ys.reduce((s, c) => s + c.points.length, 0);
   const intro = `
   <div class="card">
-    <div class="card-title">📊 文化产业学 · 学习进度</div>
+    <div class="card-title">📊 管理学原理 · 学习进度</div>
     <div class="row">
       <div class="pill"><div class="k">题库总量</div><div class="v">${total}</div></div>
       <div class="pill"><div class="k">已答对</div><div class="v">${done.length}</div></div>
@@ -1491,7 +1513,7 @@ function majorHTML() {
       <div class="pill"><div class="k">考纲重点</div><div class="v">${ptCount}</div></div>
     </div>
     <div class="bar mt12"><div class="bar-fill" style="width:${pct}%"></div></div>
-    <div class="muted mt12">教材：向勇《文化产业概论》(人大社2022) + 马工程《艺术学概论》(高教社2019)。「记忆」按两本书分章看考纲重点，「自测」刷题+背名词解释。</div>
+    <div class="muted mt12">教材：邢以群《管理学》（第五版，浙江大学出版社2019）+ 陈传明等《管理学》（马工程重点教材）。「记忆」按教材分章看考纲重点，「自测」刷题库+背名词解释与简答论述。</div>
   </div>
   <div class="card">
     <div class="card-title">📝 真题演练（模拟考）</div>
@@ -1518,8 +1540,8 @@ function majorHTML() {
     sub = majorTestView === 'quiz' ? cultureTestHTML() : conceptHTML();
   } else {
     const tabs = [
-      { id: 'gl', icon: '🏭', name: '文化产业概论' },
-      { id: 'ys', icon: '🎨', name: '艺术学概论' }
+      { id: 'gl', icon: '📘', name: '管理学原理（邢以群）' },
+      { id: 'ys', icon: '📗', name: '马工程《管理学》' }
     ];
     subBar = tabs.map(t =>
       `<div class="nav-item ${majorMemoBook === t.id ? 'active' : ''}" style="flex:1;justify-content:center" data-action="major-memobook" data-book="${t.id}">${t.icon} ${t.name}</div>`).join('');
@@ -1647,7 +1669,7 @@ function majorMemoHTML() {
   const chapters = M[majorMemoBook] || [];
   if (!chapters.length) return `<div class="card"><div class="empty">该教材的考纲重点还没整理</div></div>`;
   if (majorMemoCh >= chapters.length) majorMemoCh = 0;
-  const bookName = majorMemoBook === 'gl' ? '文化产业概论' : '艺术学概论';
+  const bookName = majorMemoBook === 'gl' ? '管理学原理（邢以群）' : '马工程《管理学》';
   /* 章节选择 chips */
   const chChips = chapters.map((c, i) =>
     `<div class="chip ${majorMemoCh === i ? 'on' : ''}" data-action="major-memoch" data-i="${i}" style="cursor:pointer">${esc(c.ch.split(' ')[0])}</div>`).join('');
@@ -1837,21 +1859,21 @@ function buildCulQueue(book) {
   return shuffle(q);
 }
 
-/* 文化产业学自测（校考200分） */
+/* 管理学原理自测（校考200分） */
 function cultureTestHTML() {
   if (!culQueue.length) { culQueue = buildCulQueue(culBook); culTotal = culQueue.length; }
-  const books = ['全部', '概论', '艺术学'];
+  const books = ['全部'];
   const chips = books.map(b =>
     `<div class="chip ${culBook === b ? 'on' : ''}" data-action="culture-book" data-book="${b}" style="cursor:pointer">${b}</div>`).join('');
   const finished = culQueue.length === 0;
   let body;
   if (finished) {
-    body = `<div class="card"><div class="card-title">🎓 文化产业学自测</div><div class="empty">🎉 本轮已刷完！点「换一批」再来一组，或切换教材范围。</div></div>`;
+    body = `<div class="card"><div class="card-title">🎓 管理学原理自测</div><div class="empty">🎉 本轮已刷完！点「换一批」再来一组。</div></div>`;
   } else {
     const it = culQueue[0];
     body = `
     <div class="card">
-      <div class="card-title">🎓 文化产业学自测 · 剩余 ${culQueue.length} 题</div>
+      <div class="card-title">🎓 管理学原理自测 · 剩余 ${culQueue.length} 题</div>
       <div class="between"><span class="tag" style="background:var(--pink-50);color:var(--pink-600);border:1px solid var(--pink-200);border-radius:999px;padding:3px 12px;font-size:12px;font-weight:700">${it.type}</span><span class="muted">${it.book}</span></div>
       <div class="qbox">${esc(it.q)}</div>
       ${culReveal ? `<div class="abox">${esc(it.a)}</div>` : `<div class="muted mt12">👆 点「看答案」回忆要点</div>`}
@@ -1864,7 +1886,7 @@ function cultureTestHTML() {
   }
   return `
   <div class="card">
-    <div class="card-title">🎓 文化产业学 · 校考 200 分</div>
+    <div class="card-title">🎓 管理学原理 · 校考 200 分</div>
     <div class="row" style="gap:8px">${chips}</div>
     <div class="pill mt12" style="display:inline-block"><div class="k">已答对</div><div class="v">${culCorrect}/${culTotal}</div></div>
   </div>

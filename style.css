@@ -1,23 +1,24 @@
 :root{
-  --pink-50:#FFF0F4;
-  --pink-100:#FDE7ED;
-  --pink-200:#FADADD;
-  --pink-300:#F8C8D2;
-  --pink-400:#F48FB1;
-  --pink-500:#EC6A92;
-  --pink-600:#D94F7B;
-  --ink:#5A3A45;
-  --ink-soft:#9A7382;
+  --pink-50:#FFF8FA;
+  --pink-100:#FDEFF3;
+  --pink-200:#F8E2E9;
+  --pink-300:#F2CBD8;
+  --pink-400:#EBA9BC;
+  --pink-500:#E08DA0;
+  --pink-600:#C97589;
+  --ink:#6E5A60;
+  --ink-soft:#A89098;
   --card:#FFFFFF;
-  --shadow:0 8px 22px rgba(236,106,146,.14);
-  --shadow-sm:0 4px 12px rgba(236,106,146,.10);
+  --shadow:0 10px 26px rgba(224,141,160,.14);
+  --shadow-sm:0 5px 14px rgba(224,141,160,.10);
+  --radius:20px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{
   font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
   color:var(--ink);
-  background:linear-gradient(135deg,#FDEEF2 0%,#FCE4EC 55%,#F3E0F0 100%);
+  background:linear-gradient(135deg,#FDF7F5 0%,#FBF1F4 55%,#FAF5F8 100%);
   background-attachment:fixed;
 }
 .app{display:flex;min-height:100vh;}
@@ -42,7 +43,7 @@ body{
 .brand .sub{font-size:11px;color:var(--ink-soft);}
 .nav-item{
   display:flex;align-items:center;gap:11px;
-  padding:11px 13px;border-radius:14px;cursor:pointer;
+  padding:11px 13px;border-radius:16px;cursor:pointer;
   color:var(--ink);font-size:14px;font-weight:600;
   transition:all .15s ease;user-select:none;
 }
