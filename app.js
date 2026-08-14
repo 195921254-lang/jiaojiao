@@ -23,7 +23,7 @@ const MODULES = [
   { id: 'major',    name: '专业课', icon: '🎓' },
   { id: 'licha',    name: '语文·查漏', icon: '🔍' },
   { id: 'syntax',   name: '英语·拆解', icon: '🧩' },
-  { id: 'mgmtmap',  name: '管理学·导图', icon: '🧠' },
+  { id: 'mgmtmap',  name: '思维导图', icon: '🧩' },
   { id: 'reading',  name: '每日阅读', icon: '📖' },
   { id: 'exercise', name: '锻炼身体', icon: '🏃' },
   { id: 'food',     name: '好好吃饭', icon: '🍱' },
@@ -167,6 +167,7 @@ let podCat = '全部';        // 播客分类筛选：全部 | 自我成长 | �
 let newsOpen = new Set();   // 新闻展开详情的索引集合
 /* 语文·查漏系统状态 */
 let lichaView = 'random';   // random=随机考点 | compare=混淆对比 | blank=挖空题 | wrong=错题本 | weak=薄弱点
+let lichaEra = 'ancient';   // ancient=古代文学 | modern=现当代 | all=全部
 let lichaRandom = [], lichaRandomIdx = 0, lichaRandomReveal = false;
 let lichaBlankIdx = 0, lichaBlankReveal = false, lichaBlankWrongType = null;
 /* 英语·长难句拆解状态 */
@@ -174,9 +175,11 @@ let syntaxView = 'practice';// practice=拆解练习 | wrong=错句库
 let syntaxLevel = store.get('wb_syntax_level', 2); // 1入门 2基础 3进阶
 let syntaxStreak = 0;       // 连续答对计数
 let syntaxQueue = [], syntaxIdx = 0, syntaxReveal = false;
-/* 管理学·导图状态 */
-let mapView = 'browse';     // browse=导图浏览 | fill=填空自测
+/* 三科思维导图状态 */
+let mapSub = 'lit';        // lit=语文 | eng=英语 | mgmt=管理学
+let mapMode = 'browse';    // browse=导图浏览 | fill=填空自测 | link=知识串联
 let mapOpen = {}, mapDetail = null, mapRevealed = {};
+let mapLinkHub = '', mapLinkReveal = false;
 /* 全局题库（由 classics.js / culture.js 注入） */
 const CLASSICS = (typeof window !== 'undefined' && window.CLASSICS) ? window.CLASSICS.slice() : [];
 const CULTURE = (typeof window !== 'undefined' && window.CULTURE) ? window.CULTURE.slice() : [];
@@ -2347,6 +2350,9 @@ function lichaHTML() {
     { id: 'weak', icon: '🔥', name: '薄弱点' }
   ];
   const tabBar = tabs.map(t => `<div class="nav-item ${lichaView === t.id ? 'active' : ''}" style="flex:1;justify-content:center;font-size:13px" data-action="licha-view" data-view="${t.id}">${t.icon} ${t.name}</div>`).join('');
+  const eraChips = [ { id: 'ancient', t: '📜 古代文学' }, { id: 'modern', t: '📚 现当代' }, { id: 'all', t: '🌐 全部' } ];
+  const eraBar = `<div class="row mt8" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted" style="font-size:12px">📍 当前阶段：</span>${eraChips.map(e => `<div class="nav-item ${lichaEra === e.id ? 'active' : ''}" style="padding:5px 10px;font-size:12px;border-radius:14px" data-action="licha-era" data-e="${e.id}">${e.t}</div>`).join('')}</div>`;
+  const eraNote = lichaEra === 'ancient' ? '<div class="note mt8">你还在<b>古代文学</b>阶段，随机抽考先只从古代出；学完古代再切「现当代」解锁。</div>' : lichaEra === 'modern' ? '<div class="note mt8">现当代文学专练（现代+当代）。</div>' : '<div class="note mt8">全部考点混抽。</div>';
   const sub = lichaView === 'random' ? lichaRandomHTML(LIT)
     : lichaView === 'compare' ? lichaCompareHTML(GAP)
     : lichaView === 'blank' ? lichaBlankHTML(GAP)
@@ -2356,12 +2362,15 @@ function lichaHTML() {
   <div class="card">
     <div class="card-title">🔍 语文 · 文学常识查漏系统</div>
     <div class="row" style="gap:6px">${tabBar}</div>
-    <div class="note mt8">每日自动抽 10 高频考点 + 混淆对比 + 挖空自测；答错进错题本，按 1/3/7 天复习倒计时。</div>
+    ${eraBar}
+    ${eraNote}
   </div>
   ${sub}`;
 }
 function lichaRandomHTML(LIT) {
-  if (!lichaRandom.length) { lichaRandom = takeRandom(LIT, Math.min(10, LIT.length)); lichaRandomIdx = 0; lichaRandomReveal = false; }
+  const MODERN = new Set(['现代', '当代']);
+  const pool = LIT.filter(it => lichaEra === 'all' ? true : lichaEra === 'modern' ? MODERN.has(it.cat) : !MODERN.has(it.cat));
+  if (!lichaRandom.length) { lichaRandom = takeRandom(pool, Math.min(10, pool.length)); lichaRandomIdx = 0; lichaRandomReveal = false; }
   if (!lichaRandom.length) return `<div class="card"><div class="empty">暂无数据</div></div>`;
   if (lichaRandomIdx >= lichaRandom.length) return `<div class="card"><div class="card-title">🎲 本轮抽考完成</div><div class="empty">10 个高频考点都过了一遍 🎉</div><div class="mt12" style="text-align:center"><button class="btn" data-action="licha-rand-again">🔄 换一批重抽</button></div></div>`;
   const it = lichaRandom[lichaRandomIdx];
@@ -2510,20 +2519,77 @@ function syntaxWrongHTML() {
 
 /* ---------- 管理学·思维导图（周三多版） ---------- */
 function mgmtmapHTML() {
-  const MAP = (typeof window !== 'undefined' && window.MGMT_MAP) ? window.MGMT_MAP : { title: '管理学', tree: [] };
-  const tabs = [
-    { id: 'browse', icon: '🌳', name: '导图浏览' },
-    { id: 'fill', icon: '✍️', name: '填空自测' }
+  const MAPS = {
+    lit:  (typeof window !== 'undefined' && window.LIT_MAP)  ? window.LIT_MAP  : { title: '语文',  tree: [] },
+    eng:  (typeof window !== 'undefined' && window.ENG_MAP)  ? window.ENG_MAP  : { title: '英语',  tree: [] },
+    mgmt: (typeof window !== 'undefined' && window.MGMT_MAP) ? window.MGMT_MAP : { title: '管理学', tree: [] }
+  };
+  const MAP = MAPS[mapSub] || MAPS.lit;
+  const subs = [
+    { id: 'lit',  icon: '📜', name: '语文' },
+    { id: 'eng',  icon: '🧩', name: '英语' },
+    { id: 'mgmt', icon: '🧠', name: '管理学' }
   ];
-  const tabBar = tabs.map(t => `<div class="nav-item ${mapView === t.id ? 'active' : ''}" style="flex:1;justify-content:center" data-action="map-view" data-view="${t.id}">${t.icon} ${t.name}</div>`).join('');
-  const sub = mapView === 'fill' ? mapFillHTML(MAP) : mapBrowseHTML(MAP);
+  const subBar = subs.map(s => `<div class="nav-item ${mapSub === s.id ? 'active' : ''}" style="flex:1;justify-content:center;font-size:13px" data-action="map-sub" data-sub="${s.id}">${s.icon} ${s.name}</div>`).join('');
+  const modes = [
+    { id: 'browse', icon: '🌳', name: '导图浏览' },
+    { id: 'fill',   icon: '✍️', name: '填空自测' },
+    { id: 'link',   icon: '🔗', name: '知识串联' }
+  ];
+  const modeBar = modes.map(m => `<div class="nav-item ${mapMode === m.id ? 'active' : ''}" style="flex:1;justify-content:center;font-size:13px" data-action="map-mode" data-mode="${m.id}">${m.icon} ${m.name}</div>`).join('');
+  const sub = mapMode === 'fill' ? mapFillHTML(MAP) : mapMode === 'link' ? mapLinkHTML(MAP) : mapBrowseHTML(MAP);
   return `
   <div class="card">
-    <div class="card-title">🧠 管理学 · 思维导图（周三多版）</div>
-    <div class="row" style="gap:8px">${tabBar}</div>
-    <div class="note mt8">按 总论/决策与计划/组织/领导/控制/创新 分层；⭐ 为历年高频。点节点展开讲解与案例。</div>
+    <div class="card-title">🧩 三科思维导图 · ${esc(MAP.title)}</div>
+    <div class="row" style="gap:6px">${subBar}</div>
+    <div class="row mt8" style="gap:6px">${modeBar}</div>
+    <div class="note mt8">点节点展开讲解与案例；⭐ 为历年高频。「知识串联」让你先<b>自己</b>想枢纽的上位/同位/下位，再显示串联网，把碎片织成网。</div>
   </div>
   ${sub}`;
+}
+function locate(tree, id, parent) {
+  for (const n of tree) {
+    if (n.id === id) return { node: n, parent: parent };
+    const r = locate(n.children || [], id, n);
+    if (r.node) return r;
+  }
+  return { node: null, parent: null };
+}
+function mapLinkHTML(MAP) {
+  const hubs = [];
+  (function walk(ns) { for (const n of ns) { if (n.key) hubs.push(n); walk(n.children || []); } })(MAP.tree || []);
+  if (!mapLinkHub) {
+    return `<div class="card"><div class="card-title">🔗 知识串联 · 选一个枢纽</div>
+      <div class="note mt8">挑一个 ⭐ 高频枢纽，系统先让你<b>自己想</b>它的上位 / 同位 / 下位概念，再显示串联网。</div>
+      <div class="mt12" style="display:flex;flex-wrap:wrap;gap:8px">${hubs.map(h => `<button class="btn sm ghost" data-action="map-link-pick" data-id="${h.id}">${esc(h.t)}</button>`).join('')}</div></div>`;
+  }
+  const loc = locate(MAP.tree || [], mapLinkHub);
+  const node = loc.node;
+  if (!node) { mapLinkHub = ''; return mapLinkHTML(MAP); }
+  const parent = loc.parent;
+  const sibs = parent ? (parent.children || []).filter(x => x !== node) : [];
+  const kids = node.children || [];
+  return `
+  <div class="card">
+    <div class="card-title">🔗 串联卡：${esc(node.t)}</div>
+    <div class="note mt8">先<b>自己填</b>下面三空，再点显示答案——这样知识才真正织成网。</div>
+    <div class="mt12" style="background:#FFF8FA;border-radius:12px;padding:12px;line-height:2">
+      <div>🔼 <b>上位概念</b>（它属于什么大类）：<span class="map-blank" style="border-bottom:2px dashed #E08DA0;padding:0 10px">＿＿＿＿</span></div>
+      <div>↔️ <b>同位概念</b>（平行的相邻项）：<span class="map-blank" style="border-bottom:2px dashed #E08DA0;padding:0 10px">＿＿＿＿</span></div>
+      <div>🔽 <b>下位概念</b>（它包含 / 派生）：<span class="map-blank" style="border-bottom:2px dashed #E08DA0;padding:0 10px">＿＿＿＿</span></div>
+    </div>
+    ${mapLinkReveal ? `<div class="mt12" style="background:#EAF7F1;border-radius:12px;padding:12px;font-size:14px;line-height:1.9;color:#3F7A5E">
+        🔼 上位：<b>${parent ? esc(parent.t) : '（顶层枢纽，无上位）'}</b><br>
+        ↔️ 同位：${sibs.length ? sibs.map(s => esc(s.t)).join('、') : '（无同位概念）'}<br>
+        🔽 下位：${kids.length ? kids.map(k => esc(k.t)).join('、') : '（已是末级节点）'}<br>
+        ${node.d ? `<div style="margin-top:8px;color:#5A7A66">📖 ${esc(node.d)}</div>` : ''}
+        ${node.rel ? `<div style="margin-top:8px;color:#C24A77">🔗 横向串联：${esc(node.rel)}</div>` : ''}
+      </div>` : ''}
+    <div class="row mt12" style="justify-content:center;gap:8px">
+      ${mapLinkReveal ? '' : `<button class="btn" data-action="map-link-reveal">🪄 显示串联网</button>`}
+      <button class="btn sm ghost" data-action="map-link-pick" data-id="">🔁 换一个枢纽</button>
+    </div>
+  </div>`;
 }
 function mapRender(MAP, fill) {
   const render = (node, depth) => {
@@ -2695,6 +2761,8 @@ const actions = {
   'home-quote-daily'() { homeQuoteRand = null; render(); },
   // 语文课 子视图切换
   'chi-view'(el) { chiView = el.dataset.view; render(); },
+  // 语文·查漏 阶段（你还在古代前面：默认古代，学完切现当代）
+  'licha-era'(el) { lichaEra = el.dataset.e; lichaRandom = []; lichaRandomIdx = 0; lichaRandomReveal = false; render(); },
   'chi-testview'(el) { chiTestView = el.dataset.view; litTestReveal = false; render(); },
   'chi-memoview'(el) { chiMemoView = el.dataset.view; render(); },
   'lit-cat'(el) { litCat = el.dataset.c; render(); },
@@ -3072,8 +3140,20 @@ const actions = {
     syntaxIdx++; syntaxReveal = false; render();
   },
   'syntax-again'() { syntaxQueue = []; syntaxIdx = 0; syntaxReveal = false; render(); },
-  // 管理学·导图
-  'map-view'(el) { mapView = el.dataset.view; render(); },
+  // 三科思维导图
+  'map-sub'(el) {
+    mapSub = el.dataset.sub;
+    mapOpen = {}; mapDetail = null; mapRevealed = {};
+    mapLinkHub = ''; mapLinkReveal = false;
+    render();
+  },
+  'map-mode'(el) {
+    mapMode = el.dataset.mode;
+    if (mapMode !== 'link') { mapLinkHub = ''; mapLinkReveal = false; }
+    render();
+  },
+  'map-link-pick'(el) { mapLinkHub = el.dataset.id || ''; mapLinkReveal = false; render(); },
+  'map-link-reveal'() { mapLinkReveal = true; render(); },
   'map-toggle'(el) { const id = el.dataset.id; mapOpen[id] = !mapOpen[id]; mapDetail = (mapDetail === id ? null : id); render(); },
   'map-reveal-term'(el) { const id = el.dataset.id; mapRevealed[id] = !mapRevealed[id]; render(); }
 };
