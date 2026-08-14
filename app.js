@@ -21,6 +21,9 @@ const MODULES = [
   { id: 'english',  name: '英语学习', icon: '🔤' },
   { id: 'chinese',  name: '语文课', icon: '📜' },
   { id: 'major',    name: '专业课', icon: '🎓' },
+  { id: 'licha',    name: '语文·查漏', icon: '🔍' },
+  { id: 'syntax',   name: '英语·拆解', icon: '🧩' },
+  { id: 'mgmtmap',  name: '管理学·导图', icon: '🧠' },
   { id: 'reading',  name: '每日阅读', icon: '📖' },
   { id: 'exercise', name: '锻炼身体', icon: '🏃' },
   { id: 'food',     name: '好好吃饭', icon: '🍱' },
@@ -162,6 +165,18 @@ let majorMemoBook = 'gl';   // gl=管理学原理(邢以群) | ys=马工程管�
 let majorMemoCh = 0;        // 记忆板块当前章节索引
 let podCat = '全部';        // 播客分类筛选：全部 | 自我成长 | 女性成长 | 时事热点 | 访谈
 let newsOpen = new Set();   // 新闻展开详情的索引集合
+/* 语文·查漏系统状态 */
+let lichaView = 'random';   // random=随机考点 | compare=混淆对比 | blank=挖空题 | wrong=错题本 | weak=薄弱点
+let lichaRandom = [], lichaRandomIdx = 0, lichaRandomReveal = false;
+let lichaBlankIdx = 0, lichaBlankReveal = false, lichaBlankWrongType = null;
+/* 英语·长难句拆解状态 */
+let syntaxView = 'practice';// practice=拆解练习 | wrong=错句库
+let syntaxLevel = store.get('wb_syntax_level', 2); // 1入门 2基础 3进阶
+let syntaxStreak = 0;       // 连续答对计数
+let syntaxQueue = [], syntaxIdx = 0, syntaxReveal = false;
+/* 管理学·导图状态 */
+let mapView = 'browse';     // browse=导图浏览 | fill=填空自测
+let mapOpen = {}, mapDetail = null, mapRevealed = {};
 /* 全局题库（由 classics.js / culture.js 注入） */
 const CLASSICS = (typeof window !== 'undefined' && window.CLASSICS) ? window.CLASSICS.slice() : [];
 const CULTURE = (typeof window !== 'undefined' && window.CULTURE) ? window.CULTURE.slice() : [];
@@ -811,7 +826,8 @@ function moduleHTML(id) {
   const fns = {
     english: englishHTML, chinese: chineseHTML, major: majorHTML, reading: readingHTML, exercise: exerciseHTML, food: foodHTML,
     finlearn: finlearnHTML, sleep: sleepHTML, skincare: skincareHTML, mood: moodHTML,
-    review: reviewHTML, news: newsHTML, podcast: podcastHTML, quotes: quotesHTML, fav: favHTML
+    review: reviewHTML, news: newsHTML, podcast: podcastHTML, quotes: quotesHTML, fav: favHTML,
+    licha: lichaHTML, syntax: syntaxHTML, mgmtmap: mgmtmapHTML
   };
   const fn = fns[id];
   return fn ? fn() : '<div class="empty">模块建设中…</div>';
@@ -2313,6 +2329,236 @@ function reviewHTML() {
 /* =========================================================
    动作处理
    ========================================================= */
+/* =========================================================
+   语文·查漏系统 / 英语·长难句拆解 / 管理学·导图（三大新空间）
+   ========================================================= */
+const SYNTAX_LEVEL = { '定语从句': 1, '虚拟语气': 2, '非谓语动词': 2, '倒装': 3 }; // 语法点→难度
+function addDays(s, n) { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n); return fmtDate(d); }
+
+/* ---------- 语文·查漏系统 ---------- */
+function lichaHTML() {
+  const LIT = (typeof window !== 'undefined' && window.LIT) ? window.LIT : [];
+  const GAP = (typeof window !== 'undefined' && window.LIT_GAP) ? window.LIT_GAP : { compare: [], blanks: [] };
+  const tabs = [
+    { id: 'random', icon: '🎲', name: '随机考点' },
+    { id: 'compare', icon: '⚖️', name: '混淆对比' },
+    { id: 'blank', icon: '✏️', name: '挖空题' },
+    { id: 'wrong', icon: '📕', name: '错题本' },
+    { id: 'weak', icon: '🔥', name: '薄弱点' }
+  ];
+  const tabBar = tabs.map(t => `<div class="nav-item ${lichaView === t.id ? 'active' : ''}" style="flex:1;justify-content:center;font-size:13px" data-action="licha-view" data-view="${t.id}">${t.icon} ${t.name}</div>`).join('');
+  const sub = lichaView === 'random' ? lichaRandomHTML(LIT)
+    : lichaView === 'compare' ? lichaCompareHTML(GAP)
+    : lichaView === 'blank' ? lichaBlankHTML(GAP)
+    : lichaView === 'wrong' ? lichaWrongHTML()
+    : lichaWeakHTML();
+  return `
+  <div class="card">
+    <div class="card-title">🔍 语文 · 文学常识查漏系统</div>
+    <div class="row" style="gap:6px">${tabBar}</div>
+    <div class="note mt8">每日自动抽 10 高频考点 + 混淆对比 + 挖空自测；答错进错题本，按 1/3/7 天复习倒计时。</div>
+  </div>
+  ${sub}`;
+}
+function lichaRandomHTML(LIT) {
+  if (!lichaRandom.length) { lichaRandom = takeRandom(LIT, Math.min(10, LIT.length)); lichaRandomIdx = 0; lichaRandomReveal = false; }
+  if (!lichaRandom.length) return `<div class="card"><div class="empty">暂无数据</div></div>`;
+  if (lichaRandomIdx >= lichaRandom.length) return `<div class="card"><div class="card-title">🎲 本轮抽考完成</div><div class="empty">10 个高频考点都过了一遍 🎉</div><div class="mt12" style="text-align:center"><button class="btn" data-action="licha-rand-again">🔄 换一批重抽</button></div></div>`;
+  const it = lichaRandom[lichaRandomIdx];
+  return `
+  <div class="card">
+    <div class="card-title">🎲 随机高频考点（${lichaRandomIdx + 1}/${lichaRandom.length}）<span class="chip" style="margin-left:8px;background:#FDEFF3">${esc(it.cat)}</span></div>
+    <div class="flash" data-action="licha-rand-flip" style="cursor:pointer;text-align:center;padding:22px 14px;border-radius:18px;background:linear-gradient(135deg,#FFF0F4,#FDE0EC);border:1.5px solid #F8C8D2">
+      <div style="font-size:20px;font-weight:800;color:#C24A77">${esc(it.face)}</div>
+      ${lichaRandomReveal ? `<div class="mt12" style="font-size:15px;color:#5A3A45;text-align:left;line-height:1.7">${esc(it.back)}</div>` : `<div class="muted mt12">👆 点击看要点</div>`}
+    </div>
+    <div class="row mt16" style="justify-content:center">
+      <button class="btn ghost" data-action="licha-rand-next">记不清，下一个 ›</button>
+      <button class="btn" data-action="licha-rand-know">✅ 记住了</button>
+    </div>
+    <div class="mt12" style="text-align:center"><button class="btn sm ghost" data-action="licha-rand-again">🎲 换一批重抽</button></div>
+  </div>`;
+}
+function lichaCompareHTML(GAP) {
+  const rows = (GAP.compare || []).map(c => `
+    <div class="card mt12">
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <div style="flex:1;background:#FDEFF3;border-radius:12px;padding:10px"><div style="font-size:12px;color:#C97589;font-weight:700">A</div><div style="font-weight:700;color:#5A3A45;margin-top:4px">${esc(c.a)}</div></div>
+        <div style="display:flex;align-items:center;font-weight:800;color:#E08DA0">VS</div>
+        <div style="flex:1;background:#EAF7F1;border-radius:12px;padding:10px"><div style="font-size:12px;color:#3F9C7A;font-weight:700">B</div><div style="font-weight:700;color:#5A3A45;margin-top:4px">${esc(c.b)}</div></div>
+      </div>
+      <div style="margin-top:8px;font-size:13px;color:#7A6A70;line-height:1.6;background:#FFF8FA;border-radius:10px;padding:8px 10px">${esc(c.note)}</div>
+    </div>`).join('');
+  return `<div class="card"><div class="card-title">⚖️ 混淆对比表（${GAP.compare.length} 组）</div><div class="note mt8">风格/朝代/作者相近的条目并排对比，考前一眼分清。</div></div>${rows}`;
+}
+function lichaBlankHTML(GAP) {
+  const list = GAP.blanks || [];
+  if (!list.length) return `<div class="card"><div class="empty">暂无挖空题</div></div>`;
+  if (lichaBlankIdx >= list.length) return `<div class="card"><div class="card-title">✏️ 本轮挖空完成</div><div class="empty">${list.length} 题都过完啦 🎉</div><div class="mt12" style="text-align:center"><button class="btn" data-action="licha-blank-again">🔄 再来一轮</button></div></div>`;
+  const b = list[lichaBlankIdx];
+  const blankHtml = `<span style="display:inline-block;min-width:90px;border-bottom:2px dashed #E08DA0;color:#C24A77;font-weight:700;padding:0 6px">＿＿＿</span>`;
+  return `
+  <div class="card">
+    <div class="card-title">✏️ 挖空自测（${lichaBlankIdx + 1}/${list.length}）<span class="chip" style="margin-left:8px;background:#FDEFF3">${esc(b.cat)}</span></div>
+    <div style="font-size:16px;line-height:1.9;color:#5A3A45;margin-top:10px">${esc(b.q).replace('______', blankHtml)}</div>
+    ${lichaBlankReveal ? `<div class="mt12" style="background:#EAF7F1;border-radius:12px;padding:10px 12px"><div style="font-weight:800;color:#2E8B57">答案：${esc(b.a)}</div><div style="font-size:13px;color:#5A7A66;margin-top:6px">📌 ${esc(b.point)}</div></div>` : ''}
+    ${!lichaBlankReveal
+      ? `<div class="row mt16" style="justify-content:center"><button class="btn" data-action="licha-blank-reveal">🔍 显示答案</button></div>`
+      : `<div class="row mt16" style="justify-content:center">
+           <button class="btn ghost" data-action="licha-blank-wrong">😣 答错了</button>
+           <button class="btn" data-action="licha-blank-know">😎 答对了</button>
+         </div>
+         ${lichaBlankWrongType ? `<div class="row mt12" style="justify-content:center;gap:8px"><span class="muted">错误类型：</span>${['记混', '遗忘', '理解偏差'].map(t => `<button class="btn sm ${lichaBlankWrongType === t ? '' : 'ghost'}" data-action="licha-blank-type" data-t="${t}">${t}</button>`).join('')}</div><div class="mt12" style="text-align:center"><button class="btn sm" data-action="licha-blank-savewrong">📌 记入错题本</button></div>` : ''}
+        `}
+    <div class="mt12" style="text-align:center"><button class="btn sm ghost" data-action="licha-blank-again">🔄 换一轮</button></div>
+  </div>`;
+}
+function lichaWrongHTML() {
+  const wrong = store.get('wb_lit_wrong', []);
+  if (!wrong.length) return `<div class="card"><div class="card-title">📕 错题本</div><div class="empty">还没有错题，继续保持！答错挖空题会自动进这里。</div></div>`;
+  const stageName = ['1天后复习', '3天后复习', '7天后复习', '已完成'];
+  const rows = wrong.map((w, i) => {
+    const due = (w.nextReview || w.ts) <= TODAY;
+    return `<div class="card mt12">
+      <div style="font-weight:700;color:#5A3A45">${esc(w.q)}</div>
+      <div style="font-size:13px;color:#2E8B57;margin-top:4px">答案：${esc(w.a)}</div>
+      <div class="row mt8" style="gap:6px;flex-wrap:wrap">
+        <span class="chip" style="background:#FFF0F4;color:#C24A77">${esc(w.type || '未分类')}</span>
+        <span class="chip" style="background:#FDEFF3">错 ${w.count || 1} 次</span>
+        <span class="chip" style="background:${due ? '#FFE9EE' : '#EEF6F1'};color:${due ? '#C24A77' : '#3F9C7A'}">${due ? '⏰ 今天可复习' : '下次 ' + (w.nextReview || '-')}</span>
+        <span class="chip" style="background:#F2F4F8">${stageName[w.stage] || ''}</span>
+      </div>
+      <div class="row mt10" style="justify-content:flex-end;gap:8px">
+        <button class="btn sm ghost danger" data-action="licha-wrong-del" data-i="${i}">删除</button>
+        ${due ? `<button class="btn sm" data-action="licha-wrong-review" data-i="${i}">✅ 已复习</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="card"><div class="card-title">📕 错题本（${wrong.length} 题）</div><div class="note mt8">按“记混 / 遗忘 / 理解偏差”分类，复习倒计时 1 天 → 3 天 → 7 天，逐级巩固。</div></div>${rows}`;
+}
+function lichaWeakHTML() {
+  const wrong = store.get('wb_lit_wrong', []);
+  const cnt = {};
+  wrong.forEach(w => { cnt[w.q] = (cnt[w.q] || 0) + (w.count || 1); });
+  const ranked = Object.keys(cnt).map(k => ({ q: k, n: cnt[k] })).sort((a, b) => b.n - a.n).slice(0, 8);
+  if (!ranked.length) return `<div class="card"><div class="card-title">🔥 顽固薄弱点</div><div class="empty">暂无数据，多答几道挖空题就会生成“顽固薄弱点”清单。</div></div>`;
+  const rows = ranked.map((r, idx) => `<div class="card mt12"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px;font-weight:900;color:#E08DA0">#${idx + 1}</span><div style="font-weight:700;color:#5A3A45">${esc(r.q)}</div></div><div class="mt6" style="color:#C24A77;font-weight:700">累计出错 ${r.n} 次 · 建议优先抽测</div></div>`).join('');
+  return `<div class="card"><div class="card-title">🔥 顽固薄弱点清单（每周生成）</div><div class="note mt8">出错最多的考点会被优先抽测，针对性攻克。</div></div>${rows}`;
+}
+
+/* ---------- 英语·长难句拆解 ---------- */
+function syntaxHTML() {
+  const list = (typeof window !== 'undefined' && window.ENG_SYNTAX) ? window.ENG_SYNTAX : [];
+  const levelName = { 1: '入门', 2: '基础', 3: '进阶' }[syntaxLevel] || '基础';
+  const tabs = [
+    { id: 'practice', icon: '🔬', name: '拆解练习' },
+    { id: 'wrong', icon: '🗂️', name: '错句库' }
+  ];
+  const tabBar = tabs.map(t => `<div class="nav-item ${syntaxView === t.id ? 'active' : ''}" style="flex:1;justify-content:center" data-action="syntax-view" data-view="${t.id}">${t.icon} ${t.name}</div>`).join('');
+  const sub = syntaxView === 'wrong' ? syntaxWrongHTML() : syntaxPracticeHTML(list, levelName);
+  return `
+  <div class="card">
+    <div class="card-title">🧩 英语 · 语法诊断与长难句拆解</div>
+    <div class="row" style="gap:8px">${tabBar}</div>
+    <div class="row mt12" style="gap:10px;flex-wrap:wrap">
+      <div class="pill"><div class="k">当前难度</div><div class="v">${levelName}</div></div>
+      <div class="pill"><div class="k">连续答对</div><div class="v">${syntaxStreak} 次</div></div>
+      <div class="pill"><div class="k">规则</div><div class="v" style="font-size:13px">连对3次升级·错1次降级</div></div>
+    </div>
+  </div>
+  ${sub}`;
+}
+function syntaxPracticeHTML(list, levelName) {
+  let pool = list.filter(s => (SYNTAX_LEVEL[s.grammar] || 2) === syntaxLevel);
+  if (!pool.length) pool = list;
+  if (!syntaxQueue.length) { syntaxQueue = shuffle(pool); syntaxIdx = 0; syntaxReveal = false; }
+  if (!syntaxQueue.length) return `<div class="card"><div class="empty">暂无句子</div></div>`;
+  if (syntaxIdx >= syntaxQueue.length) return `<div class="card"><div class="card-title">🔬 本轮拆解完成</div><div class="empty">这一难度的句子都练完啦 🎉</div><div class="mt12" style="text-align:center"><button class="btn" data-action="syntax-again">🔄 再来一轮</button></div></div>`;
+  const s = syntaxQueue[syntaxIdx];
+  const reveal = syntaxReveal;
+  const part = (label, txt) => reveal ? `<div style="background:#FFF8FA;border-radius:10px;padding:8px 10px;margin-top:8px"><b style="color:#C24A77">${label}：</b><span style="color:#5A3A45">${esc(txt)}</span></div>` : '';
+  return `
+  <div class="card">
+    <div class="card-title">🔬 长难句拆解（难度：${levelName}）<button class="spk" data-action="eng-sentspeak" data-line="${esc(s.en)}" title="朗读" style="margin-left:8px">🔊</button></div>
+    <div style="font-size:17px;font-weight:700;color:#5A3A45;line-height:1.7;margin-top:6px">${esc(s.en)}</div>
+    <div class="muted mt8" style="font-size:14px">${esc(s.zh)}</div>
+    <div class="mt12"><button class="btn sm" data-action="syntax-reveal">🔍 我来解剖（看解析）</button></div>
+    ${reveal ? `
+      ${part('① 主干', s.trunk)}
+      ${part('② 修饰', s.modifiers)}
+      ${part('③ 语法点', s.point)}
+      ${part('④ 仿写示例', s.imitate)}
+      <div class="row mt16" style="justify-content:center">
+        <button class="btn ghost" data-action="syntax-wrong">😣 我没对</button>
+        <button class="btn" data-action="syntax-know">😎 我对了</button>
+      </div>` : ''}
+    <div class="mt12" style="text-align:center"><button class="btn sm ghost" data-action="syntax-again">🔄 换一轮</button></div>
+  </div>`;
+}
+function syntaxWrongHTML() {
+  const wrong = store.get('wb_syntax_wrong', []);
+  if (!wrong.length) return `<div class="card"><div class="card-title">🗂️ 错句库</div><div class="empty">还没有错句，拆解时答错会自动归档到这里，按语法点标签索引。</div></div>`;
+  const groups = {};
+  wrong.forEach(w => { (groups[w.grammar] = groups[w.grammar] || []).push(w); });
+  const html = Object.keys(groups).map(g => `
+    <div class="card mt12">
+      <div class="card-title">🏷️ ${esc(g)}（${groups[g].length}）</div>
+      ${groups[g].map(w => `<div style="margin-top:8px;padding:8px 10px;background:#FFF8FA;border-radius:10px"><div style="font-weight:700;color:#5A3A45">${esc(w.en)}</div><div class="muted" style="font-size:13px;margin-top:4px">${esc(w.zh || '')}</div></div>`).join('')}
+    </div>`).join('');
+  return `<div class="card"><div class="card-title">🗂️ 错句库（${wrong.length} 句）</div><div class="note mt8">按语法点标签索引，定期混合抽测能精准补弱。</div></div>${html}`;
+}
+
+/* ---------- 管理学·思维导图（周三多版） ---------- */
+function mgmtmapHTML() {
+  const MAP = (typeof window !== 'undefined' && window.MGMT_MAP) ? window.MGMT_MAP : { title: '管理学', tree: [] };
+  const tabs = [
+    { id: 'browse', icon: '🌳', name: '导图浏览' },
+    { id: 'fill', icon: '✍️', name: '填空自测' }
+  ];
+  const tabBar = tabs.map(t => `<div class="nav-item ${mapView === t.id ? 'active' : ''}" style="flex:1;justify-content:center" data-action="map-view" data-view="${t.id}">${t.icon} ${t.name}</div>`).join('');
+  const sub = mapView === 'fill' ? mapFillHTML(MAP) : mapBrowseHTML(MAP);
+  return `
+  <div class="card">
+    <div class="card-title">🧠 管理学 · 思维导图（周三多版）</div>
+    <div class="row" style="gap:8px">${tabBar}</div>
+    <div class="note mt8">按 总论/决策与计划/组织/领导/控制/创新 分层；⭐ 为历年高频。点节点展开讲解与案例。</div>
+  </div>
+  ${sub}`;
+}
+function mapRender(MAP, fill) {
+  const render = (node, depth) => {
+    const open = fill ? true : !!mapOpen[node.id];
+    const hasKids = node.children && node.children.length;
+    const indent = 14 * depth;
+    const revealed = !!mapRevealed[node.id];
+    const showTerm = !fill || revealed;
+    const termHtml = showTerm
+      ? `<span style="font-weight:${depth === 0 ? '800' : '700'};color:${node.key ? '#C24A77' : '#5A3A45'}">${esc(node.t)}</span>${node.key ? ' <span title="历年高频">⭐</span>' : ''}`
+      : `<span class="map-blank" data-action="map-reveal-term" data-id="${node.id}" style="color:#C24A77;font-weight:700;cursor:pointer;border-bottom:2px dashed #E08DA0;padding:0 8px">＿＿＿＿</span>`;
+    const detailHtml = (!fill && mapDetail === node.id)
+      ? `<div style="margin:4px 0 2px ${indent + 18}px;background:#FFF8FA;border-radius:10px;padding:8px 10px;font-size:13px;color:#5A3A45;line-height:1.6">${esc(node.d || '')}${node.case ? `<div style="margin-top:6px;color:#C24A77">💡 ${esc(node.case)}</div>` : ''}</div>`
+      : (fill && revealed && node.d)
+      ? `<div style="margin:4px 0 2px ${indent + 18}px;background:#F0F7F2;border-radius:10px;padding:6px 10px;font-size:12px;color:#3F7A5E">${esc(node.d || '')}</div>`
+      : '';
+    const childHtml = (open && hasKids) ? node.children.map(c => render(c, depth + 1)).join('') : '';
+    const bg = depth === 0 ? '#FDF0F4' : (depth === 1 ? '#FDEFF3' : '#FFF8FA');
+    return `
+      <div style="margin-left:${indent}px">
+        <div data-action="${fill ? 'map-reveal-term' : 'map-toggle'}" data-id="${node.id}" style="display:flex;align-items:center;gap:6px;padding:7px 10px;margin-top:6px;background:${bg};border-radius:10px;cursor:pointer;border:1px solid #F3D9E2">
+          ${hasKids && !fill ? `<span style="color:#C97589;font-size:12px">${open ? '▾' : '▸'}</span>` : `<span style="width:12px"></span>`}
+          ${termHtml}
+        </div>
+        ${detailHtml}
+        ${childHtml}
+      </div>`;
+  };
+  return (MAP.tree || []).map(n => render(n, 0)).join('');
+}
+function mapBrowseHTML(MAP) { return mapRender(MAP, false); }
+function mapFillHTML(MAP) {
+  return `<div class="mt12"><div class="note">点击 ＿＿＿＿ 挖去的关键术语，补全并核对定义；挖空即考你对框架的掌握。</div></div>` + mapRender(MAP, true);
+}
+
 const actions = {
   nav(el, id) { current = id; selMood = null; render(); window.scrollTo(0, 0); },
   checkin() {
@@ -2768,7 +3014,68 @@ const actions = {
   'review-save'() {
     store.set('wb_review_' + TODAY, { win: val('rv-win').trim(), imp: val('rv-imp').trim(), plan: val('rv-plan').trim() });
     alert('已保存今日复盘 💾'); render();
-  }
+  },
+  // 语文·查漏系统
+  'licha-view'(el) { lichaView = el.dataset.view; render(); },
+  'licha-rand-flip'() { lichaRandomReveal = !lichaRandomReveal; render(); },
+  'licha-rand-next'() { lichaRandomIdx++; lichaRandomReveal = false; render(); },
+  'licha-rand-know'() { lichaRandomIdx++; lichaRandomReveal = false; render(); },
+  'licha-rand-again'() { lichaRandom = []; lichaRandomIdx = 0; lichaRandomReveal = false; render(); },
+  'licha-blank-reveal'() { lichaBlankReveal = true; render(); },
+  'licha-blank-know'() { lichaBlankIdx++; lichaBlankReveal = false; lichaBlankWrongType = null; render(); },
+  'licha-blank-wrong'() { lichaBlankWrongType = lichaBlankWrongType || '记混'; render(); },
+  'licha-blank-type'(el) { lichaBlankWrongType = el.dataset.t; render(); },
+  'licha-blank-savewrong'() {
+    const GAP = window.LIT_GAP || { blanks: [] };
+    const b = (GAP.blanks || [])[lichaBlankIdx];
+    if (b) {
+      const wrong = store.get('wb_lit_wrong', []);
+      const exist = wrong.find(w => w.q === b.q);
+      if (exist) { exist.count = (exist.count || 1) + 1; exist.stage = 0; exist.ts = TODAY; exist.nextReview = addDays(TODAY, 1); }
+      else wrong.push({ q: b.q, a: b.a, cat: b.cat, type: lichaBlankWrongType || '记混', count: 1, ts: TODAY, stage: 0, nextReview: addDays(TODAY, 1) });
+      store.set('wb_lit_wrong', wrong);
+    }
+    lichaBlankIdx++; lichaBlankReveal = false; lichaBlankWrongType = null; render();
+  },
+  'licha-blank-again'() { lichaBlankIdx = 0; lichaBlankReveal = false; lichaBlankWrongType = null; render(); },
+  'licha-wrong-del'(el) {
+    const wrong = store.get('wb_lit_wrong', []);
+    wrong.splice(+el.dataset.i, 1);
+    store.set('wb_lit_wrong', wrong); render();
+  },
+  'licha-wrong-review'(el) {
+    const wrong = store.get('wb_lit_wrong', []);
+    const i = +el.dataset.i; const w = wrong[i];
+    if (!w) return;
+    w.stage = (w.stage || 0) + 1;
+    if (w.stage >= 3) wrong.splice(i, 1);
+    else w.nextReview = addDays(TODAY, [1, 3, 7][w.stage]);
+    store.set('wb_lit_wrong', wrong); render();
+  },
+  // 英语·长难句拆解
+  'syntax-view'(el) { syntaxView = el.dataset.view; render(); },
+  'syntax-reveal'() { syntaxReveal = true; render(); },
+  'syntax-know'() {
+    syntaxStreak++;
+    if (syntaxStreak >= 3 && syntaxLevel < 3) { syntaxLevel++; syntaxStreak = 0; store.set('wb_syntax_level', syntaxLevel); }
+    syntaxIdx++; syntaxReveal = false; render();
+  },
+  'syntax-wrong'() {
+    const s = syntaxQueue[syntaxIdx];
+    syntaxStreak = 0;
+    if (syntaxLevel > 1) { syntaxLevel--; store.set('wb_syntax_level', syntaxLevel); }
+    if (s) {
+      const wrong = store.get('wb_syntax_wrong', []);
+      if (!wrong.find(w => w.en === s.en)) wrong.push({ en: s.en, zh: s.zh, grammar: s.grammar, ts: TODAY });
+      store.set('wb_syntax_wrong', wrong);
+    }
+    syntaxIdx++; syntaxReveal = false; render();
+  },
+  'syntax-again'() { syntaxQueue = []; syntaxIdx = 0; syntaxReveal = false; render(); },
+  // 管理学·导图
+  'map-view'(el) { mapView = el.dataset.view; render(); },
+  'map-toggle'(el) { const id = el.dataset.id; mapOpen[id] = !mapOpen[id]; mapDetail = (mapDetail === id ? null : id); render(); },
+  'map-reveal-term'(el) { const id = el.dataset.id; mapRevealed[id] = !mapRevealed[id]; render(); }
 };
 
 /* ---------- 工具函数 ---------- */
